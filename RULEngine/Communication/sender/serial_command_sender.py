@@ -5,12 +5,13 @@ from serial.tools import list_ports
 import os
 import threading
 from enum import Enum
+from queue import Queue
 from collections import deque
 
 import serial
 import time
 
-from RULEngine.Command.command import _Command, Move, Kick, ChargeKick, Stop, Dribbler
+from RULEngine.Command.command import _Command, Move, Stop
 from RULEngine.Communication.util import serial_protocol as protocol
 from RULEngine.Communication.util.serial_protocol import MCUVersion
 from RULEngine.Game.Player import Player
@@ -45,9 +46,10 @@ class SerialCommandSender(object):
 
         self.type = serial_type
         self.last_time = 0
-        self.command_queue = deque()
+        self.command_queue = Queue()
 
         # HACK
+        self.mutex = threading.Lock()
         self.command_dict = {0: Stop(Player(None, 0)), 1: Stop(Player(None, 1)), 2: Stop(Player(None, 2)),
                              3: Stop(Player(None, 3)), 4: Stop(Player(None, 4)), 5: Stop(Player(None,5))}
 
@@ -58,16 +60,17 @@ class SerialCommandSender(object):
     def send_loop(self):
         while not self.terminate.is_set():
             if time.time() - self.last_time > MOVE_COMMAND_SLEEP:
-                # print(self.command_dict)
+                self.mutex.acquire()
                 for c in self.command_dict.values():
                     packed_command = c.package_command(mcu_version=self.mcu_version)
                     self.serial.write(packed_command)
                     time.sleep(COMMUNICATION_SLEEP)
+                self.mutex.release()
                 self.last_time = time.time()
             else:
                 time.sleep(COMMUNICATION_SLEEP)
                 try:
-                    next_command = self.command_queue.popleft()
+                    next_command = self.command_queue.get()
                 except IndexError:
                     next_command = None
                 if next_command:
@@ -83,9 +86,11 @@ class SerialCommandSender(object):
         # TODO fix me MGL 2017/03/13
         # FIXME please
         if isinstance(command, Move) or isinstance(command, Stop):
+            self.mutex.acquire()
             self.command_dict[command.player.id] = command
+            self.mutex.release()
         else:
-            self.command_queue.append(command)
+            self.command_queue.put(command)
 
     def stop(self):
         self.terminate.set()
