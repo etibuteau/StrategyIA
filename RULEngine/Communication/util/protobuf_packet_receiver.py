@@ -5,7 +5,6 @@
     l'envoie des commandes aux robots au niveau des systèmes embarqués.
 """
 
-from collections import deque
 from queue import Queue
 from socketserver import BaseRequestHandler
 
