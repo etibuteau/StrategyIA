@@ -1,7 +1,7 @@
 # Under MIT License, see LICENSE.txt
 
 import pickle
-from collections import deque
+from queue import Queue
 from socketserver import BaseRequestHandler
 
 from RULEngine.Communication.util.threaded_udp_server import ThreadedUDPServer
@@ -14,7 +14,7 @@ class UIDebugCommandReceiver(object):
         traiter les paquets brutes envoyer par le serveur de débogage.
     """
     def __init__(self, host, port):
-        self.packet_list = deque(maxlen=DEBUG_RECEIVE_BUFFER_SIZE)
+        self.packet_list = Queue(maxsize=DEBUG_RECEIVE_BUFFER_SIZE)
         handler = self.get_udp_handler(self.packet_list)
         self.server = ThreadedUDPServer(host, port, handler)
 
@@ -29,10 +29,10 @@ class UIDebugCommandReceiver(object):
                     deque.
                 """
                 data = self.request[0]
-                p_packet_list.append(pickle.loads(data))
+                p_packet_list.put(pickle.loads(data))
         return ThreadedUDPRequestHandler
 
     def receive_command(self):
         """ Vide la file et retourne une liste des paquets brutes. """
-        for _ in range(len(self.packet_list)):
-            yield self.packet_list.pop()
+        for _ in range(self.packet_list.qsize()):
+            yield self.packet_list.get()
